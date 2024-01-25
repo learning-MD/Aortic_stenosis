@@ -1,0 +1,253 @@
+---
+title: "AS-multiome: Michelle's data"
+author: "Quanhu Sheng"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  rmdformats::readthedown:
+    toc_depth: 3
+    code_folding: hide
+---
+
+```{r,eval=FALSE,echo=FALSE}
+library(xfun)
+
+root_dir = '/nobackup/shah_lab/shengq2/20231101_AS_multiome_Michelle/data'
+dir.create(root_dir, showWarnings = FALSE, recursive = TRUE)
+setwd(root_dir)
+
+file.copy('/home/shengq2/program/ngsperl/lib/scRNA/scRNA_func.r', './', overwrite=TRUE)
+file.copy('/home/shengq2/program/RaviProjects/functions.r', './', overwrite=TRUE)
+file.copy('/data/cqs/shengq2/program/RaviProjects/20230505_as_multiome/20231101_AS_multiome_Michelle/20231102_AS_multiome_Michelle_data.rmd', './', overwrite=TRUE)
+
+date_str = format(Sys.time(), "%Y%m%d")
+
+xfun::Rscript_call(
+  rmarkdown::render,
+  list(input="20231102_AS_multiome_Michelle_data.rmd",
+       output_file=paste0(date_str, "_AS_multiome_Michelle_data.html"))
+)
+```
+
+```{css, echo=FALSE}
+#content{
+    max-width:1920px;
+}
+```
+
+```{r setup, echo=FALSE, results='hide'}
+root_dir = '/nobackup/shah_lab/shengq2/20231101_AS_multiome_Michelle/data'
+dir.create(root_dir, showWarnings = FALSE, recursive = TRUE)
+
+library(knitr)
+
+knitr::opts_chunk$set(
+  echo=TRUE, 
+  include=TRUE, 
+  warning=FALSE, 
+  message=FALSE, 
+  results="asis"
+)
+
+knitr::opts_knit$set(root.dir = root_dir)
+setwd(root_dir)
+```
+
+```{r}
+library(Hmisc)
+require(arsenal)
+
+source("functions.r")
+source("scRNA_func.r")
+
+date_str = get_date_str()
+
+prefix = paste0("AS_multiome_Michelle.", date_str)
+
+groups_file="/nobackup/shah_lab/shengq2/20231101_AS_multiome_Michelle/edgeR_inCluster_bySample/result/fileList1.txt"
+comparison_file="/nobackup/shah_lab/shengq2/20231101_AS_multiome_Michelle/edgeR_inCluster_bySample/result/fileList2.txt"
+parameter_file="/nobackup/shah_lab/shengq2/20231101_AS_multiome_Michelle/edgeR_inCluster_bySample/result/fileList3.txt"
+
+raw_h5ad_file="/nobackup/shah_lab/shengq2/20230726_Vandy_AS_from_Michelle/processed/vandy_AS_raw.h5ad"
+raw_h5seurat_file="/nobackup/shah_lab/shengq2/20230726_Vandy_AS_from_Michelle/processed/vandy_AS_raw.h5seurat"
+
+processed_h5ad_file="/nobackup/shah_lab/shengq2/20230726_Vandy_AS_from_Michelle/processed/vandy_AS_full_processed.h5ad"
+processed_h5seurat_file="/nobackup/shah_lab/shengq2/20230726_Vandy_AS_from_Michelle/processed/vandy_AS_full_processed.h5seurat"
+
+obj_file="vandy_AS_full_processed.forDE.rds"
+meta_file="vandy_AS_full_processed.forDE.meta.rds"
+```
+
+```{r, eval=TRUE}
+cat("\n# MD5 of h5ad file\n\n")
+
+md5_tbl=rbind(
+  data.frame("file"=raw_h5ad_file, "md5"="576c1d54ee1147e47b86ccb79baa626d"),
+  c(processed_h5ad_file, "8df00ad28f2ab0956d64592ed086533d")
+)
+
+for(i in 1:nrow(md5_tbl)){
+  check_md5(md5_tbl$file[i], md5_tbl$md5[i])
+}
+
+print_table(md5_tbl, row.names=F)
+```
+
+# Prepare Seurat object
+
+```{r}
+library(Seurat)
+library(SeuratDisk)
+library(SeuratData)
+```
+
+Convert h5ad to h5seurat and fix the issue of *Missing required datasets 'levels' and 'values'*
+
+```{r}
+if(!file.exists(raw_h5seurat_file)){
+  h5ad_to_h5seurat(raw_h5ad_file)
+}
+
+if(!file.exists(processed_h5seurat_file)){
+  h5ad_to_h5seurat(processed_h5ad_file)
+}
+```
+
+```{r, eval=TRUE}
+cat("\n# MD5 of h5seurat file\n\n")
+
+md5_tbl=rbind(
+  data.frame("file"=raw_h5seurat_file, "md5"=md5sum(raw_h5seurat_file)),
+  c(processed_h5seurat_file, md5sum(processed_h5seurat_file))
+)
+
+print_table(md5_tbl, row.names=F)
+```
+
+Prepare DE ready Seurat object
+
+- replace counts with raw counts from raw object file
+- update sample names
+- remove Unknown cells
+- merge Cardiomyocyte 1-4 to Cardiomyocyte
+
+```{r}
+if(!file.exists(obj_file)){
+  raw_obj=LoadH5Seurat(raw_h5seurat_file)
+  obj=LoadH5Seurat(processed_h5seurat_file)
+
+  #in processed data, the counts is normalized data. We need to replace it with raw counts
+  raw_counts=raw_obj@assays$RNA@counts
+  processed_raw_counts=raw_counts[rownames(obj), colnames(obj)]
+  obj$RNA@counts=processed_raw_counts
+
+  obj@meta.data$orig.ident <- gsub("XAS", "AS", paste0("X", obj@meta.data$batches))
+
+  obj=subset(obj, subset = leiden != "Unk")
+
+  #merge Cardiomyocyte 1-4 to Cardiomyocyte
+  obj@meta.data$seurat_cell_type=gsub("\\s.+","",obj@meta.data$leiden)
+
+  saveRDS(obj, obj_file)
+}else{
+  obj=readRDS(obj_file)
+}
+```
+
+## META information
+
+```{r}
+meta = obj@meta.data
+print_table(head(meta))
+```
+
+```{r}
+mycontrols  <- tableby.control(test=F, total=T,
+                               numeric.stats=c("Nmiss","median","q1q3","range"),
+                               cat.stats=c("Nmiss","countpct"),
+                               stats.labels=list(Nmiss='Missing', median='Median', range='Range'),
+                               digits=1, digits.p=2, digits.pct=0)
+```
+
+## Cell level meta
+
+```{r}
+formula = paste0("Condition ~ seurat_cell_type + orig.ident")
+table_sum1 <- tableby(as.formula(formula), data = meta, control=mycontrols)
+summary(table_sum1, total=FALSE, title = "", width = 3, digits=1, digits.p=2, digits.pct=0, pfootnote = TRUE)
+```
+
+```{r}
+formula = paste0("seurat_cell_type ~ orig.ident" )
+table_sum1 <- tableby(as.formula(formula), data = meta, control=mycontrols)
+summary(table_sum1, total=FALSE, title = "", width = 3, digits=1, digits.p=2, digits.pct=0, pfootnote = TRUE)
+```
+
+## Cell type
+
+```{r}
+g=DimPlot(obj, reduction="umap", group.by="seurat_cell_type", split.by="Condition", label=T, label.size=3, repel=T, raster = FALSE) + theme(aspect.ratio=1)
+ggsave(paste0("cell_type_umap.png"), width=10, height=5, units="in", dpi=300, bg="white")
+```
+
+```{r fig.width=10, fig.height=5}
+include_graphics("cell_type_umap.png")
+```
+
+# Prepare comparision
+
+## Group file
+
+```{r}
+sample_meta = meta[!duplicated(meta$orig.ident),c("orig.ident", "Condition")]
+write.table(sample_meta, file=groups_file, quote=F, sep="\t", row.names=F, col.names=F)
+print_table(sample_meta, row.names=F)
+```
+
+Group definition was saved to file <mark>`r groups_file`</mark>.
+
+## Comparison file
+
+```{r}
+datasets=unique(sample_meta$Condition)
+comparison=data.frame("group"=datasets, "comparison"=paste0(rev(datasets), collapse="_vs_"))
+write.table(comparison, file=comparison_file, quote=F, sep="\t", row.names=F, col.names=F)
+print_table(comparison, row.names=F)
+```
+
+Comparison definition was saved to file <mark>`r comparison_file`</mark>.
+
+## Parameter file
+
+```{r}
+parameters=list(
+  DE_by_cell = 0,
+  DE_cluster_pattern = "*",
+  bBetweenCluster = 0,
+  cluster_name = "seurat_cell_type",
+  covariance_file = "",
+  filter_min_cell_per_sample = 5,
+  foldChange = 1.5,
+  group_column = "Condition",
+  pvalue = 0.05,
+  reduction = "umap",
+  sample_column = "orig.ident",
+  task_name = "AS_multiome_Michelle",
+  useRawPvalue = 0)
+parameter_tbl=data.frame("value"=unlist(parameters), "parameter"=names(parameters))
+write.table(parameter_tbl, file=parameter_file, quote=F, sep="\t", row.names=F, col.names=F)
+print_table(parameter_tbl, row.names=F)
+```
+
+Parameter definition was saved to file <mark>`r parameter_file`</mark>.
+
+# MD5 of DE Seurat Object file
+
+```{r, eval=TRUE}
+cat("\n# MD5 of Seurat object file for DE analysis\n\n")
+
+md5_tbl=rbind(
+  data.frame("file"=obj_file, "md5"=md5sum(obj_file))
+)
+
+print_table(md5_tbl, row.names=F)
+```

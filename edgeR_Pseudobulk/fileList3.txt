@@ -1,0 +1,13 @@
+0	DE_by_cell
+*	DE_cluster_pattern
+0	bBetweenCluster
+seurat_cell_type	cluster_name
+	covariance_file
+5	filter_min_cell_per_sample
+1.2	foldChange
+Condition	group_column
+0.05	pvalue
+umap	reduction
+orig.ident	sample_column
+AS_multiome	task_name
+0	useRawPvalue

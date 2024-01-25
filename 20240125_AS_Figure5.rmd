@@ -1,0 +1,427 @@
+---
+title: "AS proteomics figures"
+author: 'Quanhu "Tiger" Sheng'
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  rmdformats::readthedown:
+    toc_depth: 3
+    code_folding: hide
+    number_sections: true
+---
+
+```{r,eval=FALSE,echo=FALSE}
+library(xfun)
+root_dir = '/nobackup/shah_lab/shengq2/20231113_AS_multiome_Michelle_celltype_DE_fold1.2/20240125_as_proteomics_figures'
+dir.create(root_dir, showWarnings=FALSE)
+
+setwd(root_dir)
+
+file.copy('/nobackup/h_cqs/shengq2/program/RaviProjects/20230413_as_proteomics/pc_lm_ageSexRace.csv', "./", overwrite=TRUE)
+file.copy('/nobackup/shah_lab/shengq2/20231115_AS_multiome_Michelle_celltype_DE_fold1.2.bulk/files_edgeR_inCluster_bySample/result/bulk.AS_vs_Control.counts.csv', "./", overwrite=TRUE)
+file.copy('/nobackup/shah_lab/shengq2/20231115_AS_multiome_Michelle_celltype_DE_fold1.2.bulk/files_edgeR_inCluster_bySample/result/bulk.AS_vs_Control.csv', "./", overwrite=TRUE)
+file.copy('/nobackup/shah_lab/shengq2/20231115_AS_multiome_Michelle_celltype_DE_fold1.2.bulk/files_edgeR_inCluster_bySample/result/bulk.AS_vs_Control.sig_genename.txt', "./", overwrite=TRUE)
+
+file.copy('/nobackup/h_cqs/shengq2/program/ngsperl/lib/scRNA/scRNA_func.r', './', overwrite=TRUE)
+file.copy('/nobackup/h_cqs/shengq2/program/RaviProjects/functions.r', './', overwrite=TRUE)
+file.copy('/nobackup/h_cqs/shengq2/program/ngsperl/lib/CQS/reportFunctions.R', './', overwrite=TRUE)
+
+file.copy('/nobackup/h_cqs/shengq2/program/ngsperl/lib/Report/enrichmentByClusterProfiler.R', "./", overwrite=TRUE)
+
+file.copy('/nobackup/h_cqs/shengq2/program/RaviProjects/20230505_as_multiome/20231115_snRNA_figures/20240125_as_proteomics_figures.rmd', './', overwrite=TRUE)
+
+date_str = format(Sys.time(), "%Y%m%d")
+
+xfun::Rscript_call(
+  rmarkdown::render,
+  list(input="20240125_as_proteomics_figures.rmd",
+       output_file=paste0(date_str, "_as_proteomics_figures.html"))
+)
+```
+
+```{css, echo=FALSE}
+#content{
+    max-width:1920px;
+}
+```
+
+```{r setup, echo=FALSE, warning=FALSE, message=FALSE}
+root_dir = '/nobackup/shah_lab/shengq2/20231113_AS_multiome_Michelle_celltype_DE_fold1.2/20240125_as_proteomics_figures'
+
+library(knitr)
+library(Hmisc)
+require(arsenal)
+library(tibble)
+library(edgeR)
+library(tools)
+library(dplyr)
+library(ggplot2)
+library(ggrepel)
+library(ggpubr)
+library(ComplexHeatmap)
+library(circlize)
+library(reshape2)
+library(EnhancedVolcano)
+
+knitr::opts_chunk$set(
+  echo=TRUE, 
+  include=TRUE, 
+  warning=FALSE, 
+  message=FALSE, 
+  results="asis"
+)
+
+date_str = format(Sys.time(), "%Y%m%d")
+
+knitr::opts_knit$set(root.dir = root_dir)
+setwd(root_dir)
+```
+
+```{r}
+source("functions.r")
+source('scRNA_func.r')
+source('reportFunctions.R')
+source('enrichmentByClusterProfiler.R')
+library(edgeR)
+library(ComplexHeatmap)
+
+andrew_file="pc_lm_ageSexRace.csv"
+bulk_de_file="bulk.AS_vs_Control.csv"
+obj_file="/nobackup/shah_lab/shengq2/20230726_Vandy_AS_from_Michelle/AS_Tiger/vandy_AS_full_processed.forDE.rds"
+
+bulk_sig_file="/nobackup/shah_lab/shengq2/20231115_AS_multiome_Michelle_celltype_DE_fold1.2.bulk/files_edgeR_inCluster_bySample/result/bulk.AS_vs_Control.sig.csv"
+cts = c("Cardiomyocyte", "Endothelial", "Fibroblast", "Lymphocyte", "Macrophage", "Mural", "Neuronal")
+
+de_sig_files=
+  c(bulk_sig_file, paste0(
+  "/nobackup/shah_lab/shengq2/20231113_AS_multiome_Michelle_celltype_DE_fold1.2/files_edgeR_inCluster_bySample/result/",
+  cts,
+  ".AS_vs_Control.sig.csv"))
+cts=c("Pseduobulk", cts)
+names(de_sig_files)=cts
+
+de_files=gsub(".sig.csv", ".csv", de_sig_files)
+```
+
+# Data validation by MD5
+
+```{r, echo=FALSE}
+md5_tbl=rbind(data.frame("file"=andrew_file, "md5"="015c2685a5d6bfff64d3bdf18e61c13e"),
+  c(obj_file, "199d71734c77ac77501e4c40fa4e541a")
+)
+
+for(i in 1:nrow(md5_tbl)){
+  check_md5(md5_tbl$file[i], md5_tbl$md5[i])
+}
+
+print_table(md5_tbl, row.names=F)
+```
+
+```{r}
+umap_width=6
+umap_height=5
+```
+
+```{r fig.width=umap_width, fig.height=umap_height}
+cat("\n\n# Overall UAMP\n\n")
+
+broad_cell_type_png="broad_cell_type.umap.png"
+if(!file.exists(broad_cell_type_png)){
+  obj = readRDS(obj_file)
+  g<-get_dim_plot_labelby(obj, label.by="seurat_cell_type", title="", legend.title="Cell type")
+  ggsave(broad_cell_type_png, g, width=umap_width, height=umap_height, dpi=300, units="in", b="white")
+}
+include_graphics(broad_cell_type_png)
+```
+
+# DE results
+
+## Upset plot
+
+```{r}
+cnames=unlist(lapply(cts, function(ct) {
+    all_file=de_files[[ct]]
+    sig_file=de_sig_files[[ct]]
+    n_sig=length(readLines(sig_file)) - 1
+    n_all=length(readLines(all_file)) - 1
+    paste0(ct, " (", n_sig, "/", n_all, ")")
+  }
+))
+
+sig_genes=lapply(cts, function(x) fread(de_sig_files[[x]])$V1)
+names(sig_genes)=cts
+
+upset_genes=sig_genes
+names(upset_genes)=cnames
+```
+
+```{r}
+upset_width=12
+upset_height=5
+```
+
+```{r fig.width=upset_width, fig.height=upset_height}
+library(UpSetR)
+
+upset_pdf="de_upset.pdf"
+pdf(upset_pdf, width=upset_width, height=upset_height)
+upset(fromList(upset_genes), nsets = 8, nintersects = 60, order.by = "freq", sets.x.label="DE genes")
+ignored=dev.off()
+
+upset_png="de_upset.png"
+png(upset_png, width=upset_width, height=upset_height, units="in", res=300)
+upset(fromList(upset_genes), nsets = 8, nintersects = 60, order.by = "freq", sets.x.label="DE genes")
+ignored=dev.off()
+include_graphics(upset_png)
+```
+
+Mural (2477/11758) means there are 2477 genes differential expressed between AS and Control groups out of 11758 genes expressed in Mural cells.
+
+```{r}
+volcano_width=8
+volcano_height=8
+pathway_width=6
+pathway_height=4
+```
+
+```{r}
+result=""
+ct=cts[1]
+for(ct in cts){
+  #cat("\n\n## ", ct, "\n\n")
+  result=paste0(result, "\n\n## ", ct, "\n\n")
+  de_file=de_files[[ct]]
+  de_sig_file=de_sig_files[[ct]]
+
+  de = data.frame(fread(de_file), row.names=1)
+  sig_de = data.frame(fread(de_sig_file), row.names=1)
+  sig_de = sig_de[order(sig_de$FDR),]
+
+  result=paste(result, "\n\nThere are", nrow(sig_de), "out of", nrow(de), "genes differential expressed between AS and Control groups in", ct, "data.\n\n")
+  result=paste(result, "\n\n### Volcano plot\n\n")
+
+  label_count=min(10, max(10, ceiling(0.01 * nrow(sig_de))))
+  selectLab = rownames(sig_de)[1:label_count]
+
+  g<-EnhancedVolcano(de,
+      lab = rownames(de),
+      selectLab=selectLab,
+      x = 'logFC',
+      y = 'PValue',
+      title = paste0(ct, ": ", nrow(sig_de), " DE genes out of ", nrow(de), " genes"),
+      pCutoff = 0.05,
+      pCutoffCol="FDR",
+      FCcutoff = log2(1.5),
+      pointSize = 3.0,
+      labSize = 6.0,
+      colAlpha = 1,
+      subtitle = NULL,
+      caption=NULL, drawConnectors=TRUE) + ylab(bquote(-log10(p~value)))
+  volcano_png=paste0(ct, "_volcano.png")
+  ggsave(volcano_png, g, width=volcano_width, height=volcano_height, dpi=300, units="in", b="white")
+  result=paste0(result, getFigure_width_height(volcano_png, fig.width=volcano_width, fig.height=volcano_height))
+
+  #wikipathway
+  de_genes=rownames(sig_de)
+  ct_genes=rownames(de)
+  module="WikiPathways"
+  res<-do_pathway(genes=de_genes,
+                  universe=ct_genes,
+                  modules=module)
+  dataForPlot=res$dataForPlot
+
+  result=paste0(result, "\n\n### ", module, "\n\n")
+  lst=show_pathway(
+    dataForPlot=dataForPlot,
+    pname=module,
+    prefix=paste0(ct), 
+    pathway_width=pathway_width, 
+    pathway_height=pathway_height)
+
+  result=paste0(result, getFigure_width_height(lst$png, fig.width=pathway_width, fig.height=pathway_height))
+}
+
+writeLines(result, "de.rmd")
+```
+
+```{r child="de.rmd"}
+```
+
+# BAD genes
+
+```{r}
+pc_tbl=fread(andrew_file, header=T, data.table=F)
+print_table(pc_tbl, byDT=TRUE)
+```
+
+Keep BAD genes only:
+
+- PC1: beta > 0
+- PC2: beta < 0
+- PC3: beta > 0
+
+Select genes BAD for PC1 + PC2 + PC3 (intersect)
+
+```{r}
+pc1 = pc_tbl %>% filter(PC=="pc1" & beta > 0) 
+pc2 = pc_tbl %>% filter(PC=="pc2" & beta < 0) 
+pc3 = pc_tbl %>% filter(PC=="pc3" & beta > 0)
+
+bad_genes = Reduce(intersect, list(pc1$Assay, pc2$Assay, pc3$Assay))
+```
+
+There are total `r length(bad_genes)` BAD genes.
+
+## Upset plot
+
+```{r}
+bad_sig_genes = lapply(sig_genes, function(x) intersect(x, bad_genes))
+n_sig_genes = sapply(sig_genes, length)
+n_bad_genes = sapply(bad_sig_genes, length)
+
+upset_bad_genes=bad_sig_genes
+names(upset_bad_genes)=paste0(cts, " (", n_bad_genes, "/", n_sig_genes, ")")
+```
+
+```{r}
+upset_width=10
+upset_height=5
+```
+
+```{r fig.width=upset_width, fig.height=upset_height}
+upset_pdf="bad_upset.pdf"
+pdf(upset_pdf, width=upset_width, height=upset_height)
+upset(fromList(upset_bad_genes), nsets = 8, nintersects = 60, order.by = "freq", sets.x.label="DE genes")
+ignored=dev.off()
+
+upset_png="bad_upset.png"
+png(upset_png, width=upset_width, height=upset_height, units="in", res=300)
+upset(fromList(upset_bad_genes), nsets = 8, nintersects = 40, order.by = "freq", sets.x.label="DE genes")
+ignored=dev.off()
+include_graphics(upset_png)
+```
+
+Pseduobulk (125/5776) means there are 125 genes overlapped with BAD genes out of 5776 DE genes in pseduobulk data.
+
+## Barplot
+
+```{r}
+bad_df=data.frame("Cell type"=cts, "YES"=n_bad_genes, "NO"=n_sig_genes - n_bad_genes)
+bad_df=bad_df[order(bad_df$YES, decreasing=T),]
+m_bad_df=melt(bad_df, id.vars="Cell.type", variable.name="BAD", value.name="Count")
+m_bad_df$Cell.type=factor(m_bad_df$Cell.type, levels=bad_df$Cell.type)
+m_bad_df$label=paste0(bad_df$YES, "/", bad_df$NO)
+
+bar_width=5
+bar_height=4
+```
+
+```{r fig.width=bar_width, fig.height=bar_height}
+bad_df$Y= bad_df$YES + bad_df$NO
+bad_df$label=bad_df$YES
+
+g<-ggplot() + 
+  geom_bar(data=m_bad_df, aes(x=Cell.type, y=Count, fill=BAD), stat="identity", position="stack", width=0.5) +
+  theme_pubr() +
+  geom_text(data=bad_df, aes(x=Cell.type, y=Y, label = label), vjust=-0.5, size=3) + ylim(0, 6200) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(fill="Negative remodeling by proteomics", x="", y="No. Gene") +
+  scale_fill_manual(values=c("YES"="red", "NO"="blue"))
+bad_bar_png="bad_barplot.png"
+ggsave(bad_bar_png, g, width=bar_width, height=bar_height, dpi=300, units="in", b="white")
+include_graphics(bad_bar_png)
+```
+
+## Heatmap
+
+We used the BAD genes differential expressed in Pseduobulk data to draw the heatmap. 
+
+The genes were ordered by the logFC in the Pseduobulk data.
+
+```{r}
+heatmap_width=11
+heatmap_height=4
+```
+
+```{r, fig.width=heatmap_width, fig.height=heatmap_height}
+all_bulk_de_genes=sig_genes[['Pseduobulk']]
+bad_bulk_de_genes = intersect(bad_genes, all_bulk_de_genes)
+
+de_tbls=do.call(rbind, lapply(cts, function(ct) {
+    all_file=de_files[[ct]]
+    de_ct=fread(all_file)
+    de_ct$cell_type=ct
+    return(de_ct)
+  }
+))
+
+fc_tbl=de_tbls %>% filter(V1 %in% bad_bulk_de_genes)
+mfc=data.frame(acast(fc_tbl, V1~cell_type, value.var="logFC", fill=0))
+mfc=mfc[order(mfc$Pseduobulk),]
+mfc=t(mfc)
+
+beta_df=data.frame(reshape2::acast(Assay~PC, data=pc_tbl, value.var="beta"))
+beta_df=beta_df[colnames(mfc),]
+beta_df$gene=rownames(beta_df)
+
+col_fun1 = colorRamp2(c(-max(abs(beta_df$pc1)), 0, max(abs(beta_df$pc1))), c("blue", "white", "red"))
+col_fun2 = colorRamp2(c(-max(abs(beta_df$pc2)), 0, max(abs(beta_df$pc2))), c("blue", "white", "red"))
+col_fun3 = colorRamp2(c(-max(abs(beta_df$pc3)), 0, max(abs(beta_df$pc3))), c("blue", "white", "red"))
+
+col_ha = columnAnnotation(pc1 = beta_df$pc1, 
+                          pc2 = beta_df$pc2, 
+                          pc3 = beta_df$pc3, 
+                          col = list( pc1 = col_fun1, 
+                                      pc2 = col_fun2, 
+                                      pc3 = col_fun3),
+                          annotation_name_side = "left")
+
+ht1 = Heatmap(mfc, 
+  show_row_names=TRUE, 
+  row_names_side = "left",
+  column_names_side = "top",
+  show_row_dend=TRUE, 
+  cluster_rows=TRUE,
+  cluster_columns=FALSE,
+  clustering_method_rows="ward.D2", 
+  clustering_method_columns="ward.D2", 
+  show_column_dend=FALSE, 
+  heatmap_legend_param = list(title="logFC"),
+  bottom_annotation = col_ha,
+  column_names_gp = grid::gpar(fontsize = 5, rot=45))
+
+bad_heatmap_png = "bad_de_heatmap.png"
+png(bad_heatmap_png, width=heatmap_width, height=heatmap_height, units="in", res=300, bg="white")
+hh = draw(ht1)
+ignored = dev.off()
+include_graphics(bad_heatmap_png)
+```
+
+## wikipathway
+
+We used `r length(bad_bulk_de_genes)` BAD genes differential expressed in Pseduobulk data to do the pathway analysis, 
+all `r length(all_bulk_de_genes)` Pseduobulk DE genes were used as background.
+
+```{r, fig.width=pathway_width, fig.height=pathway_height}
+#wikipathway
+module="WikiPathways"
+res<-do_pathway(genes=bad_bulk_de_genes,
+                universe=all_bulk_de_genes,
+                modules=module)
+dataForPlot=res$dataForPlot
+
+result=paste0(result, "\n\n### ", module, "\n\n")
+lst=show_pathway(
+  dataForPlot=dataForPlot,
+  pname=module,
+  prefix="bad_bulk", 
+  pathway_width=pathway_width, 
+  pathway_height=pathway_height)
+
+include_graphics(lst$png)
+```
+
+# Save the session information
+
+```{r}
+writeLines(capture.output(sessionInfo()), paste0(date_str, '.sessionInfo.txt'))
+```
